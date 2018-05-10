@@ -1,2 +1,1 @@
-# c-classical-crypto
-C code for classical ciphers
+Refer to <coming soon>
