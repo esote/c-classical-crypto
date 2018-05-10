@@ -1,1 +1,1 @@
-Refer to <coming soon>
+Refer to ... coming soon
