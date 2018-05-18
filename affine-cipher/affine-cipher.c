@@ -8,19 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PROGRAM_NAME "affine-cipher"
-
-#define _warn(...) do {					\
-		if(!quiet)						\
-			error(0, 0, __VA_ARGS__);	\
-	} while(0)
-
-/* Disable printing warnings */
-static bool quiet;
-
-/* Convert string to intmax_t in base 10 */
-#define STRTOIMAX_BASE 10
-
 /* Standard 26-character alphabet */
 #define ALPHABET_SIZE 26
 
@@ -33,47 +20,47 @@ static struct option const long_opts[] = {
 	{"decrypt", no_argument, NULL, 'd'},
 	{"encrypt", no_argument, NULL, 'e'},
 	{"help", no_argument, NULL, 'h'},
-	{"quiet", no_argument, NULL, 'q'},
+
 	{NULL, 0, NULL, 0}
 };
 
-_Noreturn void usage(int const status)
+static _Noreturn void usage(int const status, char const *const name)
 {
+	printf("Usage: %s [OPTION]... A B [STRING]...\n", name);
 	if(status != EXIT_SUCCESS) {
-		fprintf(stderr, "Usage: %s [A] [B] [OPTION]... [STRING]...\n",
-				PROGRAM_NAME);
-		fprintf(stderr, "Try '%s --help' for more information.\n",
-				PROGRAM_NAME);
+		fprintf(stderr, "Try '%s --help' for more information.\n", name);
 	} else {
-		printf("Usage: %s [A] [B] [OPTION]... [STRING]...\n", PROGRAM_NAME);
 		puts("Encrypt and decrypt strings with a simple formula.");
-		printf("Example: %s 5 7 -e \"Hello World!\"\n", PROGRAM_NAME);
+		printf("Example: %s -e 5 7 \"Hello World!\"\n", name);
 		puts("\nOptions:\n\
   -d, --decrypt    decrypt input strings\n\
   -e, --encrypt    encrypt input strings\n\
-  -h, --help       display this help text and exit\n\
-  -q, --quiet      disable warning when cipher mode is unspecified");
-		printf("\nA must be coprime of %d.\n", ALPHABET_SIZE);
+  -h, --help       display this help text and exit");
+		printf("\nA must be coprime of %d, default mode is encryption.\n",
+			   ALPHABET_SIZE);
 	}
 
 	exit(status);
 }
 
-intmax_t gcd(intmax_t const a, intmax_t const b)
+__attribute__((const))
+static inline intmax_t gcd(intmax_t const a, intmax_t const b)
 {
 	return (b != 0) ? gcd(b, a % b) : a;
 }
 
 /* Calculate modular multiplicitive inverse,
 	source: Rosetta Code */
-intmax_t mod_inverse(intmax_t a, intmax_t b)
+__attribute__((const))
+static intmax_t mod_inverse(intmax_t a, intmax_t b)
 {
-	intmax_t b0 = b, t, q;
-	intmax_t x0 = 0, x1 = 1;
-	
 	if(b == 1)
 		return 1;
-	
+
+	intmax_t const b0 = b;
+	intmax_t t, q;
+	intmax_t x0 = 0, x1 = 1;
+
 	while(a > 1) {
 		q = a / b;
 		t = b;
@@ -91,7 +78,7 @@ intmax_t mod_inverse(intmax_t a, intmax_t b)
 }
 
 /* Assumes contiguous character encoding from a-z A-Z */
-char encrypt_char(char const ch, intmax_t const a, intmax_t const b)
+static char encrypt_char(char const ch, intmax_t const a, intmax_t const b)
 {
 	intmax_t enc;
 
@@ -105,7 +92,8 @@ char encrypt_char(char const ch, intmax_t const a, intmax_t const b)
 	return (char)(enc + ((a * ((intmax_t)ch - enc) + b) % ALPHABET_SIZE));
 }
 
-char decrypt_char(char const ch, intmax_t const a, intmax_t const b)
+static char decrypt_char(char const ch, intmax_t const b,
+						 intmax_t const mod_inv)
 {
 	intmax_t dec;
 
@@ -116,21 +104,19 @@ char decrypt_char(char const ch, intmax_t const a, intmax_t const b)
 	else
 		return ch;
 
-	return (char)(dec + (mod_inverse(a, ALPHABET_SIZE)
-		* (ALPHABET_SIZE + ch - dec - b) % ALPHABET_SIZE));
+	return (char)(dec + (mod_inv * (ALPHABET_SIZE + ch - dec - b)
+			% ALPHABET_SIZE));
 }
 
-void affine_cipher(char const *const string, intmax_t const a,
-				   intmax_t const b, enum cipher_mode const cipher_mode)
+static void affine_cipher(char const *const string, intmax_t const a,
+						  intmax_t const b, enum cipher_mode const cipher_mode,
+						  intmax_t const mod_inv)
 {
-	if(gcd(a, ALPHABET_SIZE) != 1)
-		error(EXIT_FAILURE, 0, "A must be coprime to %d", ALPHABET_SIZE);
-
 	for(size_t i = 0; string[i]; ++i) {
 		if(cipher_mode == encrypt)
 			putchar(encrypt_char(string[i], a, b));
 		else
-			putchar(decrypt_char(string[i], a, b));
+			putchar(decrypt_char(string[i], b, mod_inv));
 	}
 }
 
@@ -138,32 +124,12 @@ int main(int const argc, char *const *const argv)
 {
 	enum cipher_mode cipher_mode = none;
 
-	char const *const key_a = (argc > 1) ? argv[1] : NULL;
-	char const *const key_b = (argc > 2) ? argv[2] : NULL;
-
-	if(key_a != NULL
-	   && (strcmp(key_a, "-h") == 0 || strcmp(key_a, "--help") == 0)) {
-		usage(EXIT_SUCCESS);
-	}
-
-	if(key_a == NULL || key_b == NULL)
-		error(EXIT_FAILURE, 0, "first argument must be A, second argument must be B");
-
-	/* First two arguments are positional */
-	optind += 2;
-
-	quiet = false;
-
-	/* Signed to avoid error when calculating
-		modular multiplicitive inverse */
-	intmax_t a = 0, b = 0;
-
 	static char const *const default_strings_list[] = {NULL};
 	char const *const *strings_list;
 
 	int c;
 
-	while((c = getopt_long(argc, argv, "dehq", long_opts, NULL)) != -1) {
+	while((c = getopt_long(argc, argv, "deh", long_opts, NULL)) != -1) {
 		switch(c) {
 			case 'd':
 				cipher_mode = decrypt;
@@ -172,34 +138,45 @@ int main(int const argc, char *const *const argv)
 				cipher_mode = encrypt;
 				break;
 			case 'h':
-				usage(EXIT_SUCCESS);
-				break;
-			case 'q':
-				quiet = true;
+				usage(EXIT_SUCCESS, argv[0]);
 				break;
 			default:
-				usage(EXIT_FAILURE);
+				usage(EXIT_FAILURE, argv[0]);
 		}
 	}
 
-	if(cipher_mode == none) {
+	if(cipher_mode == none)
 		cipher_mode = encrypt;
-		_warn("cipher mode unspecified ('--encrypt' or '--decrypt'), "
-			 "defaulting to '--encrypt'");
-	}
 
-	a = strtoimax(key_a, NULL, STRTOIMAX_BASE);
-	b = strtoimax(key_b, NULL, STRTOIMAX_BASE);
+	char const *const a_tmp = argv[optind++];
+	char const *const b_tmp = argv[optind++];
+
+	if(a_tmp == NULL || b_tmp == NULL)
+		error(EXIT_FAILURE, 0, "missing A and B, try '--help'");
+
+	/* Signed to avoid error when calculating
+		modular multiplicitive inverse */
+	intmax_t const a = strtoimax(a_tmp, NULL, 10);
+	intmax_t const b = strtoimax(b_tmp, NULL, 10);
 
 	if(a < 0 || b < 0)
-		error(EXIT_FAILURE, 0, "A and B must be positive");
+		error(EXIT_FAILURE, 0, "A and B must be positive, try '--help'");
+
+	if(gcd(a, ALPHABET_SIZE) != 1) {
+		error(EXIT_FAILURE, 0, "A must be coprime to %d, try '--help'",
+								ALPHABET_SIZE);
+	}
 
 	strings_list = (optind < argc
 					? (char const *const *) &argv[optind]
 					: default_strings_list);
 
+	/* keep value between affine_cipher calls,
+		only required for decrypt */
+	intmax_t const mod_inv = mod_inverse(a, ALPHABET_SIZE);
+
 	for(size_t i = 0; strings_list[i]; ++i) {
-		affine_cipher(strings_list[i], a, b, cipher_mode);
+		affine_cipher(strings_list[i], a, b, cipher_mode, mod_inv);
 		putchar('\n');
 	}
 
