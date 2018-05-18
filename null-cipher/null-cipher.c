@@ -8,14 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PROGRAM_NAME "null-cipher"
-
 #define _warn(...) do {					\
 		if(!quiet)						\
 			error(0, 0, __VA_ARGS__);	\
 	} while(0)
-
-#define STRTOUMAX_BASE 10
 
 /* Disable warnings */
 static bool quiet;
@@ -24,20 +20,18 @@ static struct option const long_opts[] = {
 	{"help", no_argument, NULL, 'h'},
 	{"index", required_argument, NULL, 'i'},
 	{"quiet", no_argument, NULL, 'q'},
+
 	{NULL, 0, NULL, 0}
 };
 
-_Noreturn void usage(int const status)
+static _Noreturn void usage(int const status, char const *const name)
 {
+	printf("Usage: %s [OPTION]... KEY [POSITION]...\n\n", name);
 	if(status != EXIT_SUCCESS) {
-		fprintf(stderr, "Usage: %s [KEY] [OPTION]... [POSITION]...\n",
-				PROGRAM_NAME);
-		fprintf(stderr, "Try '%s --help' for more information.\n",
-				PROGRAM_NAME);
+		fprintf(stderr, "Try '%s --help' for more information.\n", name);
 	} else {
-		printf("Usage: %s [KEY] [OPTION]... [POSITION]...\n", PROGRAM_NAME);
 		puts("Create a ciphertext from positions of letters in a string.");
-		printf("Example: %s \"Hello World\" 1 2\n", PROGRAM_NAME);
+		printf("Example: %s \"Hello World\" 1 2\n", name);
 		puts("\nOptions:\n\
   -h, --help         display this help text and exit\n\
   -i, --index=NUM    begin indexing at NUM (default: 0)\n\
@@ -47,10 +41,10 @@ _Noreturn void usage(int const status)
 	exit(status);
 }
 
-void null_cipher(char const *const string, char const *const key,
+static void null_cipher(char const *const string, char const *const key,
 				 uintmax_t const index)
 {
-	uintmax_t const place = strtoumax(key, NULL, STRTOUMAX_BASE);
+	uintmax_t const place = strtoumax(key, NULL, 10);
 
 	if(strlen(string) <= index + place) {
 		_warn("index in string not found");
@@ -66,18 +60,6 @@ int main(int const argc, char *const *const argv)
 
 	uintmax_t index = 0;
 
-	char const *const key = (argc > 1) ? argv[1] : NULL;
-
-	if(key != NULL && (strcmp(key, "-h") == 0 || strcmp(key, "--help") == 0)) {
-		usage(EXIT_SUCCESS);
-	}
-
-	if(key == NULL)
-		error(EXIT_FAILURE, 0, "first argument must be the key");
-	
-	/* First argument is positional */
-	optind++;
-
 	/* Used for tokenizing key */
 	char const *token;
 	char const *const delim = " ,.\t\n";
@@ -90,18 +72,23 @@ int main(int const argc, char *const *const argv)
 	while((c = getopt_long(argc, argv, "hiq", long_opts, NULL)) != -1) {
 		switch(c) {
 			case 'h':
-				usage(EXIT_SUCCESS);
+				usage(EXIT_SUCCESS, argv[0]);
 				break;
 			case 'i':
-				index = strtoumax(optarg, NULL, STRTOUMAX_BASE);
+				index = strtoumax(optarg, NULL, 10);
 				break;
 			case 'q':
 				quiet = true;
 				break;
 			default:
-				usage(EXIT_FAILURE);
+				usage(EXIT_FAILURE, argv[0]);
 		}
 	}
+
+	char const *const key = argv[optind++];
+
+	if(key == NULL)
+		error(EXIT_FAILURE, 0, "missing key, try '--help'");
 
 	strings_list = (optind < argc
 					? (char const *const *) &argv[optind]
