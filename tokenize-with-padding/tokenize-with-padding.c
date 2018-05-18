@@ -1,5 +1,6 @@
 /* tokenize-with-padding -- tokenize strings */
 
+#include <errno.h>
 #include <error.h>
 #include <getopt.h>
 #include <inttypes.h>
@@ -15,8 +16,6 @@
 			error(0, 0, __VA_ARGS__);	\
 	} while(0)
 
-#define STRTOUMAX_BASE 10
-
 /* Disable warnings */
 static bool quiet;
 
@@ -25,19 +24,18 @@ static struct option const long_opts[] = {
 	{"help", no_argument, NULL, 'h'},
 	{"padding", required_argument, NULL, 'p'},
 	{"quiet", no_argument, NULL, 'q'},
+
 	{NULL, 0, NULL, 0}
 };
 
-_Noreturn void usage(int const status)
+static _Noreturn void usage(int const status, char const *const name)
 {
+	printf("Usage: %s [OPTION]... SIZE [STRING]...\n\n", name);
 	if(status != EXIT_SUCCESS) {
-		fprintf(stderr, "Usage: %s [OPTION]... [STRING]...\n", PROGRAM_NAME);
-		fprintf(stderr, "Try '%s --help' for more information.\n",
-				PROGRAM_NAME);
+		fprintf(stderr, "Try '%s --help' for more information.\n", name);
 	} else {
-		printf("Usage: %s [SIZE] [OPTION]... [STRING]...\n", PROGRAM_NAME);
 		puts("Tokenize strings.");
-		printf("Example: %s 2 Hello World\n", PROGRAM_NAME);
+		printf("Example: %s 2 Hello World\n", name);
 		puts("\nOptions:\n\
   -d, --delim=STR       delimiting character\n\
   -h, --help            display this help text and exit\n\
@@ -49,15 +47,16 @@ _Noreturn void usage(int const status)
 }
 
 /* Branchless saturating addition (overflow becomes UINTMAX_MAX) */
-uintmax_t sat_add_uintmax_t(uintmax_t const x, uintmax_t const y)
+static uintmax_t sat_add_uintmax_t(uintmax_t const x, uintmax_t const y)
 {
 	uintmax_t res = x + y;
 	res |= -(res < x);
 	return res;
 }
 
-void tokenize_string(char const *const string, uintmax_t const token_size,
-					 char const *const delim)
+static void tokenize_string(char const *const string,
+							uintmax_t const token_size,
+							char const *const delim)
 {
 	uintmax_t count = token_size;
 	for(size_t i = 0; string[i]; ++i) {
@@ -74,23 +73,6 @@ int main(int const argc, char *const *const argv)
 {
 	quiet = false;
 
-	char const *const key = (argc > 1) ? argv[1] : NULL;
-
-	if(key != NULL && (strcmp(key, "-h") == 0 || strcmp(key, "--help") == 0)) {
-		usage(EXIT_SUCCESS);
-	}
-
-	if(key == NULL)
-		error(EXIT_FAILURE, 0, "first argument must be the token size");
-
-	uintmax_t const token_size = strtoumax(key, NULL, STRTOUMAX_BASE);
-
-	if(token_size == 0)
-		error(EXIT_FAILURE, 0, "token size must be greater than zero");
-
-	/* First argument is positional */
-	optind++;
-
 	char const *delim = " ";
 	char const *padding = " ";
 
@@ -105,7 +87,7 @@ int main(int const argc, char *const *const argv)
 				delim = optarg;
 				break;
 			case 'h':
-				usage(EXIT_SUCCESS);
+				usage(EXIT_SUCCESS, argv[0]);
 				break;
 			case 'p':
 				padding = optarg;
@@ -114,9 +96,21 @@ int main(int const argc, char *const *const argv)
 				quiet = true;
 				break;
 			default:
-				usage(EXIT_FAILURE);
+				usage(EXIT_FAILURE, argv[0]);
 		}
 	}
+
+	char const *const token_tmp = argv[optind++];
+
+	if(token_tmp == NULL)
+		error(EXIT_FAILURE, 0, "token size is missing, try '--help'");
+
+	uintmax_t const token_size = strtoumax(token_tmp, NULL, 10);
+
+	if(token_size == UINTMAX_MAX && errno == ERANGE)
+		error(EXIT_FAILURE, 0, "cannot convert string to integer (overflow)");
+	else if(token_size == 0)
+		error(EXIT_FAILURE, 0, "token size must be greater than zero");
 
 	if(strlen(padding) > 1)
 		_warn("padding only uses the first character specified");
