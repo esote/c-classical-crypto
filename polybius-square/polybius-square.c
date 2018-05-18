@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PROGRAM_NAME "polybius-square"
-
 #define _warn(...) do {					\
 		if(!quiet)						\
 			error(0, 0, __VA_ARGS__);	\
@@ -26,24 +24,24 @@ enum cipher_mode {
 static struct option const long_opts[] = {
 	{"decrypt", no_argument, NULL, 'd'},
 	{"encrypt", no_argument, NULL, 'e'},
+
 	{"help", no_argument, NULL, 'h'},
 	{"i", no_argument, NULL, 'i'},
 	{"j", no_argument, NULL, 'j'},
+
 	{"quiet", no_argument, NULL, 'q'},
+
 	{NULL, 0, NULL, 0}
 };
 
-_Noreturn void usage(int const status)
+static _Noreturn void usage(int const status, char const *const name)
 {
+	printf("Usage: %s [OPTION]... [STRING/COORD]...\n\n", name);
 	if(status != EXIT_SUCCESS) {
-		fprintf(stderr, "Usage: %s [OPTION]... [STRING/COORD]...\n",
-				PROGRAM_NAME);
-		fprintf(stderr, "Try '%s --help' for more information.\n",
-				PROGRAM_NAME);
+		fprintf(stderr, "Try '%s --help' for more information.\n", name);
 	} else {
-		printf("Usage: %s [OPTION]... [STRING/COORD]...\n", PROGRAM_NAME);
 		puts("Map alphabet characters to digits.");
-		printf("Example: %s -e Hello World\n", PROGRAM_NAME);
+		printf("Example: %s -e Hello World\n", name);
 		puts("\nOptions:\n\
   -d, --decrypt    decrypt input strings (use coordinates)\n\
   -e, --encrypt    encrypt input strings (use strings)\n\
@@ -97,7 +95,7 @@ static char const *const square_map['z' - 'a' + 1] = {
 };
 
 /* Assumes contiguous character encoding from a-z A-Z */
-char const *encrypt_char(char const ch)
+static char const *encrypt_char(char const ch)
 {
 	if(!(ch >= 'a' && ch <= 'z') && !(ch >= 'A' && ch <= 'Z'))
 		return NULL;
@@ -105,15 +103,15 @@ char const *encrypt_char(char const ch)
 	return square_map[tolower(ch) - 'a'];
 }
 
-char decrypt_char(char const *const string)
+static char decrypt_char(char const *const string)
 {
 	int const a = string[0] - '0';
 	int const b = string[1] - '0';
 	return square[a - 1][b - 1];
 }
 
-void polybius_square(char const *const string,
-					 enum cipher_mode const cipher_mode)
+static void polybius_square(char const *const string,
+							enum cipher_mode const cipher_mode)
 {
 	if(cipher_mode == encrypt) {
 		for(size_t i = 0; string[i]; ++i) {
@@ -163,7 +161,7 @@ int main(int const argc, char *const *const argv)
 				cipher_mode = encrypt;
 				break;
 			case 'h':
-				usage(EXIT_SUCCESS);
+				usage(EXIT_SUCCESS, argv[0]);
 				break;
 			case 'i':
 				square[2 - 1][4 - 1] = 'I';
@@ -175,7 +173,7 @@ int main(int const argc, char *const *const argv)
 				quiet = true;
 				break;
 			default:
-				usage(EXIT_FAILURE);
+				usage(EXIT_FAILURE, argv[0]);
 		}
 	}
 
