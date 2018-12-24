@@ -1,1 +1,1 @@
-Refer to https://esote.net/classical-cryptography/c-ciphers.html
+Refer to https://esote.net/cc/c.html
